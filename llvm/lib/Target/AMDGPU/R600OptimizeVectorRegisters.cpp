@@ -206,12 +206,14 @@ MachineInstr *R600VectorRegMerger::RebuildVector(
   LLVM_DEBUG(dbgs() << "    ->"; NewMI->dump(););
 
   LLVM_DEBUG(dbgs() << "  Updating Swizzle:\n");
-  for (MachineRegisterInfo::use_instr_iterator It = MRI->use_instr_begin(Reg),
-      E = MRI->use_instr_end(); It != E; ++It) {
-    LLVM_DEBUG(dbgs() << "    "; (*It).dump(); dbgs() << "    ->");
-    SwizzleInput(*It, RemapChan);
-    LLVM_DEBUG((*It).dump());
+  for (MachineInstr &UseMI : MRI->use_nodbg_instructions(Reg)) {
+    LLVM_DEBUG(dbgs() << "    "; UseMI.dump(); dbgs() << "    ->");
+    SwizzleInput(UseMI, RemapChan);
+    LLVM_DEBUG(UseMI.dump());
   }
+  // The channels of Reg have been remapped, so debug values no longer describe
+  // the original vector.
+  MRI->markUsesInDebugValueAsUndef(Reg);
   RSI->Instr->eraseFromParent();
 
   // Update RSI
@@ -252,7 +254,7 @@ void R600VectorRegMerger::SwizzleInput(MachineInstr &MI,
 }
 
 bool R600VectorRegMerger::areAllUsesSwizzeable(Register Reg) const {
-  return llvm::all_of(MRI->use_instructions(Reg),
+  return llvm::all_of(MRI->use_nodbg_instructions(Reg),
                       [&](const MachineInstr &MI) { return canSwizzle(MI); });
 }
 
